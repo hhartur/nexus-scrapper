@@ -224,6 +224,36 @@ app.get('/chapter/:id', async c => {
   return c.json(processApiResponse(raw))
 })
 
+app.get('/image', async c => {
+  const url = c.req.query('url')
+  if (!url) return c.text('missing url', 400)
+
+  const cacheKey = new Request(url)
+  const cache = caches.default
+
+  let response = await cache.match(cacheKey)
+  if (response) {
+    return response
+  }
+
+  // Busca original
+  const imgRes = await fetch(url)
+  if (!imgRes.ok) {
+    return c.text('image fetch failed', 502)
+  }
+
+  // Clona e salva no cache
+  response = new Response(imgRes.body, {
+    headers: {
+      'Content-Type': imgRes.headers.get('Content-Type'),
+      'Cache-Control': 'public, max-age=31536000',
+    },
+  })
+
+  await cache.put(cacheKey, response.clone())
+  return response
+})
+
 /* ===============================
    Export (ESSENCIAL)
 ================================ */
