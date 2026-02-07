@@ -8,13 +8,7 @@
     "dev": "nodemon server.js"
   },
   "dependencies": {
-    "@fastify/cors": "^8.5.0",
-    "@fastify/static": "^6.12.0",
-    "archiver": "^6.0.1",
-    "fastify": "^4.25.2",
-    "hono": "^4.11.8",
-    "lz-string": "^1.5.0",
-    "node-fetch": "^2.7.0"
+    "hono": "^4.11.8"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"
