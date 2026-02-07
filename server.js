@@ -188,19 +188,28 @@ function processApiResponse(data) {
 ================================ */
 app.get('/search', async c => {
   const query = c.req.query('query')
+  const page = c.req.query('page') ?? 1
   const limit = c.req.query('limit') ?? 15
   const includeNsfw = c.req.query('includeNsfw') ?? true
   const sortBy = c.req.query('sortBy') ?? 'views'
 
-  let url = `https://nexustoons.com/api/mangas?limit=${limit}&includeNsfw=${includeNsfw}&sortBy=${sortBy}`
+  let url = `https://nexustoons.com/api/mangas?` +
+            `page=${page}` +
+            `&limit=${limit}` +
+            `&includeNsfw=${includeNsfw}` +
+            `&sortBy=${sortBy}`
+
   if (query) {
-    url = `https://nexustoons.com/api/mangas?search=${encodeURIComponent(
-      query
-    )}&limit=${limit}&includeNsfw=${includeNsfw}`
+    url = `https://nexustoons.com/api/mangas?` +
+          `search=${encodeURIComponent(query)}` +
+          `&page=${page}` +
+          `&limit=${limit}` +
+          `&includeNsfw=${includeNsfw}`
   }
 
   const res = await fetch(url)
   const raw = await res.json()
+
   return c.json(processApiResponse(raw))
 })
 
