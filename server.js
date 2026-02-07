@@ -1,14 +1,8 @@
 // server.js - COMPLETO COM AMBAS CRIPTOGRAFIAS
 import Fastify from "fastify";
 import path from "path";
-import fs from "fs";
-import archiver from "archiver";
 import cors from "@fastify/cors";
 import fastifyStatic from "@fastify/static";
-import { fileURLToPath } from "url";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const fastify = Fastify({ logger: true });
 
@@ -164,10 +158,6 @@ await orionCrypto.initFromSecret(ORION_SECRET);
 // Plugins
 // ===============================
 await fastify.register(cors, { origin: true });
-await fastify.register(fastifyStatic, {
-  root: path.join(__dirname, "public"),
-  prefix: "/",
-});
 
 // ===============================
 // Helper para processar resposta
