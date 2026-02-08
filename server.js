@@ -1,47 +1,52 @@
-import { Hono } from 'hono'
-import { cors } from 'hono/cors'
+import express from 'express';
+import cors from 'cors';
 
-const uploadedImages = new Map()
+const app = express();
 
-const app = new Hono()
-app.use('*', cors())
+// Middleware
+app.use(cors());
+app.use(express.json());
+
+// ===================================
+// FUNÇÕES DE CRIPTOGRAFIA
+// ===================================
 
 function base64ToUint8(base64) {
-  const binary = atob(base64)
-  const bytes = new Uint8Array(binary.length)
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i)
+    bytes[i] = binary.charCodeAt(i);
   }
-  return bytes
+  return bytes;
 }
 
 function base64UrlDecode(str) {
-  let base64 = str.replace(/-/g, '+').replace(/_/g, '/')
-  while (base64.length % 4) base64 += '='
-  return atob(base64)
+  let base64 = str.replace(/-/g, '+').replace(/_/g, '/');
+  while (base64.length % 4) base64 += '=';
+  return atob(base64);
 }
 
-const ORION_SECRET = 'OrionNexus2025CryptoKey!Secure'
+const ORION_SECRET = 'OrionNexus2025CryptoKey!Secure';
 
 class OrionCrypto {
   constructor() {
-    this.keys = []
-    this.initialized = false
+    this.keys = [];
+    this.initialized = false;
   }
 
   async initFromSecret(secret) {
-    const keys = []
+    const keys = [];
     for (let n = 0; n < 5; n++) {
-      const keyString = `_orion_key_${n}_v2_${secret}`
-      const encoded = new TextEncoder().encode(keyString)
-      const hashBuffer = await crypto.subtle.digest('SHA-256', encoded)
-      const hashArray = new Uint8Array(hashBuffer)
+      const keyString = `_orion_key_${n}_v2_${secret}`;
+      const encoded = new TextEncoder().encode(keyString);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', encoded);
+      const hashArray = new Uint8Array(hashBuffer);
       const hexHash = Array.from(hashArray)
         .map(b => b.toString(16).padStart(2, '0'))
-        .join('')
-      keys.push(hexHash)
+        .join('');
+      keys.push(hexHash);
     }
-    this.init(keys)
+    this.init(keys);
   }
 
   init(keys) {
@@ -52,60 +57,60 @@ class OrionCrypto {
         ),
         sbox: new Uint8Array(256),
         rsbox: new Uint8Array(256),
-      }
-      this.initSBoxForKey(keyData)
-      return keyData
-    })
-    this.initialized = true
+      };
+      this.initSBoxForKey(keyData);
+      return keyData;
+    });
+    this.initialized = true;
   }
 
   initSBoxForKey(keyData) {
-    const key = keyData.key
-    for (let i = 0; i < 256; i++) keyData.sbox[i] = i
+    const key = keyData.key;
+    for (let i = 0; i < 256; i++) keyData.sbox[i] = i;
 
-    let j = 0
+    let j = 0;
     for (let i = 0; i < 256; i++) {
-      j = (j + keyData.sbox[i] + key[i % key.length]) % 256
-      ;[keyData.sbox[i], keyData.sbox[j]] = [keyData.sbox[j], keyData.sbox[i]]
+      j = (j + keyData.sbox[i] + key[i % key.length]) % 256;
+      [keyData.sbox[i], keyData.sbox[j]] = [keyData.sbox[j], keyData.sbox[i]];
     }
 
     for (let i = 0; i < 256; i++) {
-      keyData.rsbox[keyData.sbox[i]] = i
+      keyData.rsbox[keyData.sbox[i]] = i;
     }
   }
 
   rotateRight(byte, positions) {
-    positions %= 8
-    return ((byte >>> positions) | (byte << (8 - positions))) & 255
+    positions %= 8;
+    return ((byte >>> positions) | (byte << (8 - positions))) & 255;
   }
 
   decrypt(keyIndex, encryptedBase64) {
-    const keyData = this.keys[keyIndex]
-    const key = keyData.key
-    const rsbox = keyData.rsbox
+    const keyData = this.keys[keyIndex];
+    const key = keyData.key;
+    const rsbox = keyData.rsbox;
 
-    const encrypted = base64ToUint8(encryptedBase64)
-    const decrypted = new Uint8Array(encrypted.length)
-    const keyLength = key.length
+    const encrypted = base64ToUint8(encryptedBase64);
+    const decrypted = new Uint8Array(encrypted.length);
+    const keyLength = key.length;
 
     for (let i = encrypted.length - 1; i >= 0; i--) {
-      let byte = encrypted[i]
+      let byte = encrypted[i];
 
-      if (i > 0) byte ^= encrypted[i - 1]
-      else byte ^= key[keyLength - 1]
+      if (i > 0) byte ^= encrypted[i - 1];
+      else byte ^= key[keyLength - 1];
 
-      byte = rsbox[byte]
+      byte = rsbox[byte];
 
       const rotateAmount =
-        (((key[(i + 3) % keyLength] + (i & 255)) & 255) % 7) + 1
-      byte = this.rotateRight(byte, rotateAmount)
+        (((key[(i + 3) % keyLength] + (i & 255)) & 255) % 7) + 1;
+      byte = this.rotateRight(byte, rotateAmount);
 
-      byte ^= key[i % keyLength]
+      byte ^= key[i % keyLength];
 
-      decrypted[i] = byte
+      decrypted[i] = byte;
     }
 
-    return new TextDecoder().decode(decrypted)
+    return new TextDecoder().decode(decrypted);
   }
 
   isEncryptedResponse(data) {
@@ -115,169 +120,216 @@ class OrionCrypto {
       typeof data.d === 'string' &&
       typeof data.k === 'number' &&
       typeof data.v === 'number'
-    )
+    );
   }
 
   processResponse(response) {
-    if (!this.isEncryptedResponse(response)) return response
-    const keyIndex = response.v === 1 ? 0 : response.k || 0
-    return JSON.parse(this.decrypt(keyIndex, response.d))
+    if (!this.isEncryptedResponse(response)) return response;
+    const keyIndex = response.v === 1 ? 0 : response.k || 0;
+    return JSON.parse(this.decrypt(keyIndex, response.d));
   }
 }
 
-const CHAPTER_KEY = 'NexusToons2026SecretKeyForChapterEncryption!@#$'
+const CHAPTER_KEY = 'NexusToons2026SecretKeyForChapterEncryption!@#$';
 
 function xorDecrypt(text, key) {
-  let result = ''
+  let result = '';
   for (let i = 0; i < text.length; i++) {
     result += String.fromCharCode(
       text.charCodeAt(i) ^ key.charCodeAt(i % key.length)
-    )
+    );
   }
-  return result
+  return result;
 }
 
 function decryptChapter(encryptedBase64) {
-  const decoded = base64UrlDecode(encryptedBase64)
-  const decrypted = xorDecrypt(decoded, CHAPTER_KEY)
-  return JSON.parse(decrypted)
+  const decoded = base64UrlDecode(encryptedBase64);
+  const decrypted = xorDecrypt(decoded, CHAPTER_KEY);
+  return JSON.parse(decrypted);
 }
 
-const orionCrypto = new OrionCrypto()
-await orionCrypto.initFromSecret(ORION_SECRET)
+// Inicializar crypto
+const orionCrypto = new OrionCrypto();
+await orionCrypto.initFromSecret(ORION_SECRET);
 
 function processApiResponse(data) {
   if (orionCrypto.isEncryptedResponse(data)) {
-    return orionCrypto.processResponse(data)
+    return orionCrypto.processResponse(data);
   }
 
   if (typeof data === 'string') {
-    return decryptChapter(data)
+    return decryptChapter(data);
   }
 
   if (data?.d && typeof data.d === 'string') {
     try {
-      return decryptChapter(data.d)
+      return decryptChapter(data.d);
     } catch {
-      return data
+      return data;
     }
   }
 
-  return data
+  return data;
 }
 
-app.get('/search', async c => {
-  const query = c.req.query('query')
-  const page = c.req.query('page') ?? 1
-  const limit = c.req.query('limit') ?? 15
-  const includeNsfw = c.req.query('includeNsfw') ?? true
-  const sortBy = c.req.query('sortBy') ?? 'views'
+// Cache de imagens
+const imageCache = new Map();
 
-  let url = `https://nexustoons.com/api/mangas?` +
-            `page=${page}` +
-            `&limit=${limit}` +
-            `&includeNsfw=${includeNsfw}` +
-            `&sortBy=${sortBy}`
+// ===================================
+// ROTAS DA API
+// ===================================
 
-  if (query) {
-    url = `https://nexustoons.com/api/mangas?` +
-          `search=${encodeURIComponent(query)}` +
-          `&page=${page}` +
-          `&limit=${limit}` +
-          `&includeNsfw=${includeNsfw}`
-  }
+// Rota raiz
+app.get('/', (req, res) => {
+  res.json({
+    message: 'NexusToons Proxy API',
+    endpoints: {
+      search: '/api/search?query=naruto&page=1&limit=15',
+      manga: '/api/manga/:slug',
+      chapter: '/api/chapter/:id',
+      image: '/api/image?url=IMAGE_URL'
+    }
+  });
+});
 
-  const res = await fetch(url)
-  const raw = await res.json()
-
-  return c.json(processApiResponse(raw))
-})
-
-app.get('/manga/:slug', async c => {
-  const res = await fetch(
-    `https://nexustoons.com/api/manga/${c.req.param('slug')}`
-  )
-  const raw = await res.json()
-  return c.json(processApiResponse(raw))
-})
-
-app.get('/chapter/:id', async c => {
-  const token = c.req.header('authorization')
-  const headers = token ? { Authorization: token } : {}
-
-  const res = await fetch(
-    `https://nexustoons.com/api/chapter/${c.req.param('id')}`,
-    { headers }
-  )
-  const raw = await res.json()
-  return c.json(processApiResponse(raw))
-})
-
-const imageCache = new Map()
-
-app.get('/image', async c => {
-  const url = c.req.query('url')
-  if (!url) return c.text('missing url', 400)
-
-  const urlHash = await crypto.subtle.digest(
-    'SHA-256',
-    new TextEncoder().encode(url)
-  )
-  const hashArray = Array.from(new Uint8Array(urlHash))
-  const imageId = hashArray.map(b => b.toString(16).padStart(2, '0')).join('').substring(0, 16)
-
-  if (imageCache.has(imageId)) {
-    const cached = imageCache.get(imageId)
-    return c.redirect(cached.url)
-  }
-
+// Buscar mangás
+app.get('/api/search', async (req, res) => {
   try {
-    const imgRes = await fetch(url)
-    if (!imgRes.ok) {
-      return c.text('image fetch failed', 502)
+    const { query = '', page = 1, limit = 15, includeNsfw = true, sortBy = 'views' } = req.query;
+
+    let url = `https://nexustoons.com/api/mangas?` +
+      `page=${page}` +
+      `&limit=${limit}` +
+      `&includeNsfw=${includeNsfw}` +
+      `&sortBy=${sortBy}`;
+
+    if (query) {
+      url = `https://nexustoons.com/api/mangas?` +
+        `search=${encodeURIComponent(query)}` +
+        `&page=${page}` +
+        `&limit=${limit}` +
+        `&includeNsfw=${includeNsfw}`;
     }
 
-    const blob = await imgRes.blob()
-    const fileName = `image_${imageId}.${blob.type.split('/')[1] || 'jpg'}`
-    
-    const formData = new FormData()
-    formData.append('file', blob, fileName)
+    const response = await fetch(url);
+    const raw = await response.json();
+
+    res.json(processApiResponse(raw));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Detalhes do mangá
+app.get('/api/manga/:slug', async (req, res) => {
+  try {
+    const { slug } = req.params;
+
+    const response = await fetch(
+      `https://nexustoons.com/api/manga/${slug}`
+    );
+    const raw = await response.json();
+
+    res.json(processApiResponse(raw));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Capítulo
+app.get('/api/chapter/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const token = req.headers.authorization;
+
+    const headers = token ? { Authorization: token } : {};
+
+    const response = await fetch(
+      `https://nexustoons.com/api/chapter/${id}`,
+      { headers }
+    );
+    const raw = await response.json();
+
+    res.json(processApiResponse(raw));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Proxy de imagem
+app.get('/api/image', async (req, res) => {
+  try {
+    const { url } = req.query;
+
+    if (!url) {
+      return res.status(400).send('missing url parameter');
+    }
+
+    // Gerar hash da URL
+    const urlHash = await crypto.subtle.digest(
+      'SHA-256',
+      new TextEncoder().encode(url)
+    );
+    const hashArray = Array.from(new Uint8Array(urlHash));
+    const imageId = hashArray
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('')
+      .substring(0, 16);
+
+    // Verificar cache
+    if (imageCache.has(imageId)) {
+      const cached = imageCache.get(imageId);
+      return res.redirect(cached.url);
+    }
+
+    // Buscar imagem
+    const imgResponse = await fetch(url);
+    if (!imgResponse.ok) {
+      return res.status(502).send('image fetch failed');
+    }
+
+    const blob = await imgResponse.blob();
+    const fileName = `image_${imageId}.${blob.type.split('/')[1] || 'jpg'}`;
+
+    // Upload para tmpfiles.org
+    const formData = new FormData();
+    formData.append('file', blob, fileName);
 
     const uploadResponse = await fetch('https://tmpfiles.org/api/v1/upload', {
       method: 'POST',
       body: formData
-    })
+    });
 
-    const uploadData = await uploadResponse.json()
-    
+    const uploadData = await uploadResponse.json();
+
     if (uploadData.status !== 'success') {
-      return c.text('upload failed', 500)
+      return res.status(500).send('upload failed');
     }
 
-    const tmpUrl = uploadData.data.url
-    const directUrl = tmpUrl.replace('tmpfiles.org/', 'tmpfiles.org/dl/')
+    const tmpUrl = uploadData.data.url;
+    const directUrl = tmpUrl.replace('tmpfiles.org/', 'tmpfiles.org/dl/');
 
-    const deleteAfter = Math.floor(Math.random() * 20000) + 10000
-    
+    // Cachear (Vercel tem limite de 10 segundos de execução, então cache curto)
+    const deleteAfter = 60000; // 1 minuto
+
     const timeoutId = setTimeout(() => {
-      imageCache.delete(imageId)
-    }, deleteAfter)
+      imageCache.delete(imageId);
+    }, deleteAfter);
 
     const cacheData = {
       url: directUrl,
       timeoutId: timeoutId,
       uploadedAt: Date.now(),
       deleteAt: Date.now() + deleteAfter
-    }
+    };
 
-    imageCache.set(imageId, cacheData)
+    imageCache.set(imageId, cacheData);
 
-    return c.redirect(directUrl)
-
+    res.redirect(directUrl);
   } catch (error) {
-    console.error('Erro:', error)
-    return c.text(error, 500)
+    res.status(500).send(error.message);
   }
-})
+});
 
-export default app
+// Exportar para Vercel
+export default app;
