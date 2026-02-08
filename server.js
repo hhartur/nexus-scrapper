@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import ImageKit from 'imagekit'
+import ImageKit from 'imagekit-javascript'
 
 const imagekit = new ImageKit({
   publicKey: 'public_jy+YNalWZalq1kwXGxEeUsscFBo=',
