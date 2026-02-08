@@ -231,8 +231,14 @@ app.get('/image', async c => {
     }
 
     const arrayBuffer = await imgRes.arrayBuffer()
-    const buffer = Buffer.from(arrayBuffer)
-    const base64Image = buffer.toString('base64')
+    const uint8Array = new Uint8Array(arrayBuffer)
+    
+    let binary = ''
+    const len = uint8Array.byteLength
+    for (let i = 0; i < len; i++) {
+      binary += String.fromCharCode(uint8Array[i])
+    }
+    const base64Image = btoa(binary)
 
     const fileName = `temp_${Date.now()}_${Math.random().toString(36).substring(7)}`
     
@@ -268,7 +274,7 @@ app.get('/image', async c => {
 
   } catch (error) {
     console.error('Erro:', error)
-    return c.text(`upload failed, ${error}`, 500)
+    return c.text('upload failed', 500)
   }
 })
 
