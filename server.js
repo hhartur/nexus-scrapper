@@ -1,12 +1,5 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import ImageKit from 'imagekit-javascript'
-
-const imagekit = new ImageKit({
-  publicKey: 'public_jy+YNalWZalq1kwXGxEeUsscFBo=',
-  privateKey: 'private_Ey90FTJijnuciUtq1X2TpVychMQ=',
-  urlEndpoint: 'https://ik.imagekit.io/scrapper'
-})
 
 const uploadedImages = new Map()
 
@@ -220,9 +213,23 @@ app.get('/chapter/:id', async c => {
   return c.json(processApiResponse(raw))
 })
 
+const imageCache = new Map()
+
 app.get('/image', async c => {
   const url = c.req.query('url')
   if (!url) return c.text('missing url', 400)
+
+  const urlHash = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(url)
+  )
+  const hashArray = Array.from(new Uint8Array(urlHash))
+  const imageId = hashArray.map(b => b.toString(16).padStart(2, '0')).join('').substring(0, 16)
+
+  if (imageCache.has(imageId)) {
+    const cached = imageCache.get(imageId)
+    return c.redirect(cached.url)
+  }
 
   try {
     const imgRes = await fetch(url)
@@ -240,7 +247,7 @@ app.get('/image', async c => {
     }
     const base64Image = btoa(binary)
 
-    const fileName = `temp_${Date.now()}_${Math.random().toString(36).substring(7)}`
+    const fileName = `temp_${imageId}_${Date.now()}`
     
     const formData = new FormData()
     formData.append('file', base64Image)
@@ -250,7 +257,6 @@ app.get('/image', async c => {
     formData.append('tags', 'temporary')
 
     const privateKey = 'private_Ey90FTJijnuciUtq1X2TpVychMQ='
-    const publicKey = 'public_jy+YNalWZalq1kwXGxEeUsscFBo='
     const authHeader = 'Basic ' + btoa(privateKey + ':')
 
     const uploadResponse = await fetch('https://upload.imagekit.io/api/v1/files/upload', {
@@ -275,17 +281,23 @@ app.get('/image', async c => {
             'Authorization': authHeader
           }
         })
+        imageCache.delete(imageId)
         uploadedImages.delete(fileId)
       } catch (error) {
         console.error('Erro ao deletar imagem:', error)
       }
     }, deleteAfter)
 
-    uploadedImages.set(fileId, {
-      timeoutId,
+    const cacheData = {
+      url: imagekitUrl,
+      fileId: fileId,
+      timeoutId: timeoutId,
       uploadedAt: Date.now(),
       deleteAt: Date.now() + deleteAfter
-    })
+    }
+
+    imageCache.set(imageId, cacheData)
+    uploadedImages.set(fileId, cacheData)
 
     return c.redirect(imagekitUrl)
 
