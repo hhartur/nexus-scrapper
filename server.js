@@ -242,22 +242,39 @@ app.get('/image', async c => {
 
     const fileName = `temp_${Date.now()}_${Math.random().toString(36).substring(7)}`
     
-    const uploadResponse = await imagekit.upload({
-      file: base64Image,
-      fileName: fileName,
-      folder: '/temp-images',
-      useUniqueFileName: true,
-      tags: ['temporary']
+    const formData = new FormData()
+    formData.append('file', base64Image)
+    formData.append('fileName', fileName)
+    formData.append('folder', '/temp-images')
+    formData.append('useUniqueFileName', 'true')
+    formData.append('tags', 'temporary')
+
+    const privateKey = 'private_Ey90FTJijnuciUtq1X2TpVychMQ='
+    const publicKey = 'public_jy+YNalWZalq1kwXGxEeUsscFBo='
+    const authHeader = 'Basic ' + btoa(privateKey + ':')
+
+    const uploadResponse = await fetch('https://upload.imagekit.io/api/v1/files/upload', {
+      method: 'POST',
+      headers: {
+        'Authorization': authHeader
+      },
+      body: formData
     })
 
-    const imagekitUrl = uploadResponse.url
-    const fileId = uploadResponse.fileId
+    const uploadData = await uploadResponse.json()
+    const imagekitUrl = uploadData.url
+    const fileId = uploadData.fileId
 
     const deleteAfter = Math.floor(Math.random() * 20000) + 10000
     
     const timeoutId = setTimeout(async () => {
       try {
-        await imagekit.deleteFile(fileId)
+        await fetch(`https://api.imagekit.io/v1/files/${fileId}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': authHeader
+          }
+        })
         uploadedImages.delete(fileId)
       } catch (error) {
         console.error('Erro ao deletar imagem:', error)
@@ -274,7 +291,7 @@ app.get('/image', async c => {
 
   } catch (error) {
     console.error('Erro:', error)
-    return c.text(`${error}`, 500)
+    return c.text('upload failed', 500)
   }
 })
 
