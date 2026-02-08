@@ -1,15 +1,18 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
+import ImageKit from 'imagekit'
 
-/* ===============================
-   App
-================================ */
+const imagekit = new ImageKit({
+  publicKey: 'public_jy+YNalWZalq1kwXGxEeUsscFBo=',
+  privateKey: 'private_Ey90FTJijnuciUtq1X2TpVychMQ=',
+  urlEndpoint: 'https://ik.imagekit.io/scrapper'
+})
+
+const uploadedImages = new Map()
+
 const app = new Hono()
 app.use('*', cors())
 
-/* ===============================
-   Helpers base64 (Workers-safe)
-================================ */
 function base64ToUint8(base64) {
   const binary = atob(base64)
   const bytes = new Uint8Array(binary.length)
@@ -25,9 +28,6 @@ function base64UrlDecode(str) {
   return atob(base64)
 }
 
-/* ===============================
-   Orion Crypto v2
-================================ */
 const ORION_SECRET = 'OrionNexus2025CryptoKey!Secure'
 
 class OrionCrypto {
@@ -49,7 +49,6 @@ class OrionCrypto {
       keys.push(hexHash)
     }
     this.init(keys)
-    console.log('✅ Orion Crypto v2 inicializado')
   }
 
   init(keys) {
@@ -133,9 +132,6 @@ class OrionCrypto {
   }
 }
 
-/* ===============================
-   Chapter XOR Crypto
-================================ */
 const CHAPTER_KEY = 'NexusToons2026SecretKeyForChapterEncryption!@#$'
 
 function xorDecrypt(text, key) {
@@ -154,15 +150,9 @@ function decryptChapter(encryptedBase64) {
   return JSON.parse(decrypted)
 }
 
-/* ===============================
-   Init Crypto
-================================ */
 const orionCrypto = new OrionCrypto()
 await orionCrypto.initFromSecret(ORION_SECRET)
 
-/* ===============================
-   Helper
-================================ */
 function processApiResponse(data) {
   if (orionCrypto.isEncryptedResponse(data)) {
     return orionCrypto.processResponse(data)
@@ -183,9 +173,6 @@ function processApiResponse(data) {
   return data
 }
 
-/* ===============================
-   Routes
-================================ */
 app.get('/search', async c => {
   const query = c.req.query('query')
   const page = c.req.query('page') ?? 1
@@ -237,33 +224,52 @@ app.get('/image', async c => {
   const url = c.req.query('url')
   if (!url) return c.text('missing url', 400)
 
-  const cacheKey = new Request(url)
-  const cache = caches.default
+  try {
+    const imgRes = await fetch(url)
+    if (!imgRes.ok) {
+      return c.text('image fetch failed', 502)
+    }
 
-  let response = await cache.match(cacheKey)
-  if (response) {
-    return response
+    const arrayBuffer = await imgRes.arrayBuffer()
+    const buffer = Buffer.from(arrayBuffer)
+    const base64Image = buffer.toString('base64')
+
+    const fileName = `temp_${Date.now()}_${Math.random().toString(36).substring(7)}`
+    
+    const uploadResponse = await imagekit.upload({
+      file: base64Image,
+      fileName: fileName,
+      folder: '/temp-images',
+      useUniqueFileName: true,
+      tags: ['temporary']
+    })
+
+    const imagekitUrl = uploadResponse.url
+    const fileId = uploadResponse.fileId
+
+    const deleteAfter = Math.floor(Math.random() * 20000) + 10000
+    
+    const timeoutId = setTimeout(async () => {
+      try {
+        await imagekit.deleteFile(fileId)
+        uploadedImages.delete(fileId)
+      } catch (error) {
+        console.error('Erro ao deletar imagem:', error)
+      }
+    }, deleteAfter)
+
+    uploadedImages.set(fileId, {
+      timeoutId,
+      uploadedAt: Date.now(),
+      deleteAt: Date.now() + deleteAfter
+    })
+
+    return c.redirect(imagekitUrl)
+
+  } catch (error) {
+    console.error('Erro:', error)
+    return c.text('upload failed', 500)
   }
-
-  // Busca original
-  const imgRes = await fetch(url)
-  if (!imgRes.ok) {
-    return c.text('image fetch failed', 502)
-  }
-
-  // Clona e salva no cache
-  response = new Response(imgRes.body, {
-    headers: {
-      'Content-Type': imgRes.headers.get('Content-Type'),
-      'Cache-Control': 'public, max-age=31536000',
-    },
-  })
-
-  await cache.put(cacheKey, response.clone())
-  return response
 })
 
-/* ===============================
-   Export (ESSENCIAL)
-================================ */
 export default app

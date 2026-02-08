@@ -8,7 +8,8 @@
     "dev": "nodemon server.js"
   },
   "dependencies": {
-    "hono": "^4.11.8"
+    "hono": "^4.11.8",
+    "imagekit-javascript": "^4.0.1"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"
