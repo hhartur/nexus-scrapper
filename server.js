@@ -237,69 +237,42 @@ app.get('/image', async c => {
       return c.text('image fetch failed', 502)
     }
 
-    const arrayBuffer = await imgRes.arrayBuffer()
-    const uint8Array = new Uint8Array(arrayBuffer)
-    
-    let binary = ''
-    const len = uint8Array.byteLength
-    for (let i = 0; i < len; i++) {
-      binary += String.fromCharCode(uint8Array[i])
-    }
-    const base64Image = btoa(binary)
-
-    const fileName = `temp_${imageId}_${Date.now()}`
+    const blob = await imgRes.blob()
+    const fileName = `image_${imageId}.${blob.type.split('/')[1] || 'jpg'}`
     
     const formData = new FormData()
-    formData.append('file', base64Image)
-    formData.append('fileName', fileName)
-    formData.append('folder', '/temp-images')
-    formData.append('useUniqueFileName', 'true')
-    formData.append('tags', 'temporary')
+    formData.append('file', blob, fileName)
 
-    const privateKey = 'private_Ey90FTJijnuciUtq1X2TpVychMQ='
-    const authHeader = 'Basic ' + btoa(privateKey + ':')
-
-    const uploadResponse = await fetch('https://upload.imagekit.io/api/v1/files/upload', {
+    const uploadResponse = await fetch('https://tmpfiles.org/api/v1/upload', {
       method: 'POST',
-      headers: {
-        'Authorization': authHeader
-      },
       body: formData
     })
 
     const uploadData = await uploadResponse.json()
-    const imagekitUrl = uploadData.url
-    const fileId = uploadData.fileId
+    
+    if (uploadData.status !== 'success') {
+      return c.text('upload failed', 500)
+    }
+
+    const tmpUrl = uploadData.data.url
+    const directUrl = tmpUrl.replace('tmpfiles.org/', 'tmpfiles.org/dl/')
 
     const deleteAfter = Math.floor(Math.random() * 20000) + 10000
     
-    const timeoutId = setTimeout(async () => {
-      try {
-        await fetch(`https://api.imagekit.io/v1/files/${fileId}`, {
-          method: 'DELETE',
-          headers: {
-            'Authorization': authHeader
-          }
-        })
-        imageCache.delete(imageId)
-        uploadedImages.delete(fileId)
-      } catch (error) {
-        console.error('Erro ao deletar imagem:', error)
-      }
+    const timeoutId = setTimeout(() => {
+      imageCache.delete(imageId)
     }, deleteAfter)
 
     const cacheData = {
-      url: imagekitUrl,
-      fileId: fileId,
+      url: directUrl,
       timeoutId: timeoutId,
       uploadedAt: Date.now(),
       deleteAt: Date.now() + deleteAfter
     }
 
     imageCache.set(imageId, cacheData)
-    uploadedImages.set(fileId, cacheData)
 
-    return c.redirect(imagekitUrl)
+    return c.redirect(directUrl)
 
   } catch (error) {
     console.error('Erro:', error)
