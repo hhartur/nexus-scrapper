@@ -268,7 +268,7 @@ app.get('/image', async c => {
 
   } catch (error) {
     console.error('Erro:', error)
-    return c.text('upload failed', 500)
+    return c.text(`upload failed, ${error}`, 500)
   }
 })
 
