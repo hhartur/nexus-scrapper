@@ -184,16 +184,16 @@ app.get('/', (req, res) => {
   res.json({
     message: 'NexusToons Proxy API',
     endpoints: {
-      search: '/api/search?query=naruto&page=1&limit=15',
-      manga: '/api/manga/:slug',
-      chapter: '/api/chapter/:id',
-      image: '/api/image?url=IMAGE_URL'
+      search: '/search?query=naruto&page=1&limit=15',
+      manga: '/manga/:slug',
+      chapter: '/chapter/:id',
+      image: '/image?url=IMAGE_URL'
     }
   });
 });
 
 // Buscar mangás
-app.get('/api/search', async (req, res) => {
+app.get('/search', async (req, res) => {
   try {
     const { query = '', page = 1, limit = 15, includeNsfw = true, sortBy = 'views' } = req.query;
 
@@ -221,7 +221,7 @@ app.get('/api/search', async (req, res) => {
 });
 
 // Detalhes do mangá
-app.get('/api/manga/:slug', async (req, res) => {
+app.get('/manga/:slug', async (req, res) => {
   try {
     const { slug } = req.params;
 
@@ -237,7 +237,7 @@ app.get('/api/manga/:slug', async (req, res) => {
 });
 
 // Capítulo
-app.get('/api/chapter/:id', async (req, res) => {
+app.get('/chapter/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const token = req.headers.authorization;
@@ -257,7 +257,7 @@ app.get('/api/chapter/:id', async (req, res) => {
 });
 
 // Proxy de imagem
-app.get('/api/image', async (req, res) => {
+app.get('/image', async (req, res) => {
   try {
     const { url } = req.query;
 
